@@ -164,4 +164,4 @@ if __name__ == "__main__":
     def findurl(path, filename):
         return send_from_directory(path, filename)
 
-    app.run(debug=False)
+    app.run(debug=False, host="0.0.0.0")
