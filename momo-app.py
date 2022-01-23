@@ -627,11 +627,13 @@ if __name__ == "__main__":
         for subdir in getOutputPath(gallerydir).iterdir():
             if subdir.is_dir():
                 with cols[col]:
-                    st.image(str(subdir/"output.PNG"), caption=subdir.name)
-                    if st.button("choose", key=subdir.name):
-                        print(f"you chose me! ({subdir.name})")
-                    # increment and wrap col
-                    col = (col + 1) % len(cols)
+                    output_image_path = subdir/"output.PNG"
+                    if(os.path.exists(output_image_path)):
+                        st.image(str(output_image_path), caption=subdir.name)
+                        if st.button("choose", key=subdir.name):
+                            print(f"you chose me! ({subdir.name})")
+                        # increment and wrap col
+                        col = (col + 1) % len(cols)
         # Previous Runs
         gallery_0 = st.empty()
         gallery_1 = st.empty()
