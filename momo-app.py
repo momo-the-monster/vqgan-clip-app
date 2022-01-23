@@ -664,19 +664,16 @@ if __name__ == "__main__":
                         output_image_path = subdir/"output.PNG"
                         if(os.path.exists(output_image_path)):
                             st.image(str(output_image_path), caption=subdir.name)
+                            
                             if st.button("▶", key=f"{subdir.name}-resume"):
-                                settings = subdir/"details.json"
-                                
                                 # Opening JSON file
-                                f = open(settings)
-                                
+                                f = open(subdir/"details.json")
                                 # returns JSON object as a dictionary
                                 data = json.load(f)
-                        
-                              
-                                # Closing file
+                                # Close file
                                 f.close()
                                 
+                                # Apply data
                                 st.session_state.text_input = data["text_input"]
                                 init_image = Image.open(subdir/"output.PNG").convert("RGB") 
                                 generate_image(
@@ -695,9 +692,8 @@ if __name__ == "__main__":
                                     mse_weight_decay_steps=data["mse_weight_decay_steps"],
                                     use_cutout_augmentations=data["use_cutout_augmentations"],
                                 )
-
                                 vid_display_slot.video("temp.mp4")
-                                
+                            
                             if st.button("💥", key=f"{subdir.name}-recycle"):
                                 # Create archive dir if needed
                                 archivedir = subdir.parent/archive_dir_name
@@ -705,9 +701,9 @@ if __name__ == "__main__":
                                     os.mkdir(archivedir)
                                 # Move run to archives
                                 os.rename(subdir, archivedir/subdir.name)
-                                # os.rename(output_image_path, subdir/"archived.png")
-                            # increment and wrap col
-                            col = (col + 1) % len(cols)
+
+                        # increment and wrap col
+                        col = (col + 1) % len(cols)
 
     if submitted:
         # debug_slot.write(st.session_state) # DEBUG
