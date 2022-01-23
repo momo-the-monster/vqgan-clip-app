@@ -5,6 +5,8 @@ This script is organized like so:
 generation models
 + Core model code is abstracted in `logic.py` and imported in `generate_image`
 """
+import getopt
+
 import streamlit as st
 from pathlib import Path
 import sys
@@ -21,6 +23,7 @@ from typing import Optional, List
 from omegaconf import OmegaConf
 import imageio
 import numpy as np
+import argparse
 
 # Catch import issue, introduced in version 1.1
 # Deprecate in a few minor versions
@@ -322,26 +325,53 @@ def generate_image(
 
         status_text.text("Done!")  # End of run
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='VQGAN Art App')
+    parser.add_argument('--output', default="output",
+                        help="Set the base output folder to use")
+    try:
+        args = parser.parse_args()
+        return args
+    except SystemExit as e:
+        # This exception will be raised if --help or invalid command line arguments
+        # are used. Currently streamlit prevents the program from exiting normally
+        # so we have to do a hard exit.
+        os._exit(e.code)
+
+output_base = parse_args().output
+
 def get_new_outputdir():
     from random_word import RandomWords
     return '_'.join(RandomWords().get_random_words(limit=2, maxLength=5, maxDictionaryCount=1))
 
+def get_random_word():
+    from random_word import RandomWords
+    return RandomWords().get_random_word()
+
 def get_latest_outputdir():
     import os, glob
-    the_glob = glob.glob(os.path.join("new-output", '*/'))
+    the_glob = glob.glob(os.path.join(output_base, '*/'))
     if the_glob:
         latest = max(the_glob, key=os.path.getmtime)
         if latest:
             return os.path.basename(Path(latest))
 
 def getOutputPath(outputdir):
-    return Path('new-output', outputdir)
+    return Path(output_base, outputdir)
 
-def listDirs(rootdir):
+archive_dir_name = "~archived"
+
+def listPopulatedGalleryDirs(rootdir):
     dirs = []
     for dir in Path(rootdir).iterdir():
         if(dir.is_dir()):
-            dirs.append(dir.name)
+            populated = False
+            for subdir in dir.iterdir():
+                # print(f"Found subdir {subdir.name}, archive name is {archive_dir_name}")
+                if(subdir.name != archive_dir_name and subdir.name != ".tmp.driveupload"):
+                    populated = True
+            if populated:
+                dirs.append(dir.name)
     return dirs
 
 if __name__ == "__main__":
@@ -391,6 +421,7 @@ if __name__ == "__main__":
         text_input = st.text_input(
             "Text prompt",
             help="VQGAN-CLIP will generate an image that best fits the prompt",
+            value= st.session_state.text_input if "text_input" in st.session_state else get_random_word()
         )
 
         submitted = st.form_submit_button("Run!")
@@ -405,7 +436,7 @@ if __name__ == "__main__":
 
         num_steps = st.sidebar.select_slider(
             "steps",
-            options=[-1, 20,50,100,200,500],
+            options=[-1,5,20,50,100,200,500],
             value=50
         )
         
@@ -605,13 +636,13 @@ if __name__ == "__main__":
             st.session_state["prev_im"], caption="Output image", output_format="PNG"
         )
         
-    with st.expander("Target Directory"):
+    with st.expander(f"Target Directory: {outputdir}"):
         # Separate form for making new output dir
         with st.form("form-output-dir"):
             new_written_outputdir = st.text_input("Name", value=outputdir)
     
             if(st.form_submit_button("Create")):
-                os.mkdir(Path("new-output", new_written_outputdir))
+                os.mkdir(Path(output_base, new_written_outputdir))
                 outputdir = new_written_outputdir
 
     # Create dir if needed
@@ -619,58 +650,64 @@ if __name__ == "__main__":
     if not realdir.exists():
         realdir.mkdir()
         
+    st.write(f"output base is {output_base}")
     with st.expander("Previous Runs"):        
-        gallerydir = st.select_slider("Gallery Dir", listDirs(realdir.parent), value=realdir.name)
-        st.write(gallerydir)
-        cols = st.columns(3)
-        col = 0
-        for subdir in getOutputPath(gallerydir).iterdir():
-            if subdir.is_dir():
-                with cols[col]:
-                    output_image_path = subdir/"output.PNG"
-                    if(os.path.exists(output_image_path)):
-                        st.image(str(output_image_path), caption=subdir.name)
-                        if st.button("choose", key=subdir.name):
-                            print(f"you chose me! ({subdir.name})")
-                        # increment and wrap col
-                        col = (col + 1) % len(cols)
-        # Previous Runs
-        gallery_0 = st.empty()
-        gallery_1 = st.empty()
-        gallery_2 = st.empty()
+        options = listPopulatedGalleryDirs(output_base)
+        if(len(options) > 0):
+            gallerydir = st.select_slider("Gallery Dir", listPopulatedGalleryDirs(output_base))
+            st.write(gallerydir)
+            cols = st.columns(3)
+            col = 0
+            for subdir in getOutputPath(gallerydir).iterdir():
+                if subdir.is_dir():
+                    with cols[col]:
+                        output_image_path = subdir/"output.PNG"
+                        if(os.path.exists(output_image_path)):
+                            st.image(str(output_image_path), caption=subdir.name)
+                            if st.button("▶", key=f"{subdir.name}-resume"):
+                                settings = subdir/"details.json"
+                                
+                                # Opening JSON file
+                                f = open(settings)
+                                
+                                # returns JSON object as a dictionary
+                                data = json.load(f)
+                        
+                              
+                                # Closing file
+                                f.close()
+                                
+                                st.session_state.text_input = data["text_input"]
+                                init_image = Image.open(subdir/"output.PNG").convert("RGB") 
+                                generate_image(
+                                    # Inputs
+                                    text_input=data["text_input"],
+                                    vqgan_ckpt=data["vqgan_ckpt"],
+                                    num_steps=num_steps,
+                                    image_x=data["Xdim"],
+                                    image_y=data["ydim"],
+                                    seed=data["seed"],
+                                    init_image=init_image,
+                                    # image_prompts=image_prompts,
+                                    continue_prev_run=False,
+                                    mse_weight=data["mse_weight"],
+                                    mse_weight_decay=data["mse_weight_decay"],
+                                    mse_weight_decay_steps=data["mse_weight_decay_steps"],
+                                    use_cutout_augmentations=data["use_cutout_augmentations"],
+                                )
 
-    # with st.expander("Expand for README"):
-    #     with open("README.md", "r") as f:
-    #         # Preprocess links to redirect to github
-    #         # Thank you https://discuss.streamlit.io/u/asehmi, works like a charm!
-    #         # ref: https://discuss.streamlit.io/t/image-in-markdown/13274/8
-    #         markdown_links = [str(i) for i in Path("docs/").glob("*.md")]
-    #         images = [str(i) for i in Path("docs/images/").glob("*")]
-    #         readme_lines = f.readlines()
-    #         readme_buffer = []
-    # 
-    #         for line in readme_lines:
-    #             for md_link in markdown_links:
-    #                 if md_link in line:
-    #                     line = line.replace(
-    #                         md_link,
-    #                         "https://github.com/tnwei/vqgan-clip-app/tree/main/"
-    #                         + md_link,
-    #                     )
-    # 
-    #             readme_buffer.append(line)
-    #             for image in images:
-    #                 if image in line:
-    #                     st.markdown(" ".join(readme_buffer[:-1]))
-    #                     st.image(
-    #                         f"https://raw.githubusercontent.com/tnwei/vqgan-clip-app/main/{image}"
-    #                     )
-    #                     readme_buffer.clear()
-    #         st.markdown(" ".join(readme_buffer))
-    # 
-    # with st.expander("Expand for CHANGELOG"):
-    #     with open("CHANGELOG.md", "r") as f:
-    #         st.markdown(f.read())
+                                vid_display_slot.video("temp.mp4")
+                                
+                            if st.button("💥", key=f"{subdir.name}-recycle"):
+                                # Create archive dir if needed
+                                archivedir = subdir.parent/archive_dir_name
+                                if not (os.path.exists(archivedir)):
+                                    os.mkdir(archivedir)
+                                # Move run to archives
+                                os.rename(subdir, archivedir/subdir.name)
+                                # os.rename(output_image_path, subdir/"archived.png")
+                            # increment and wrap col
+                            col = (col + 1) % len(cols)
 
     if submitted:
         # debug_slot.write(st.session_state) # DEBUG
