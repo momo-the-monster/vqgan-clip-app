@@ -164,4 +164,19 @@ if __name__ == "__main__":
     def findurl(path, filename):
         return send_from_directory(path, filename)
 
+    #background process happening without any refreshing
+    @app.route('/delete/<value>')
+    def delete_run(value):
+        import os, shutil
+        path = f"{fdir}/{value}"
+        
+        if os.path.isdir(path):
+            print(f"deleting {path}")
+            try:
+                shutil.rmtree(path)
+                return "200"
+            except OSError as e:
+             print("Error: %s : %s" % (path, e.strerror))
+            return "500"
+
     app.run(debug=False, host="0.0.0.0")

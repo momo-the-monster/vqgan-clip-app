@@ -331,9 +331,7 @@ class VQGANCLIPRun(Run):
             # Advance iteration counter
             self.iterate_counter += 1
 
-            print(
-                f"Step {self.iterate_counter} losses: {[(i, j.item()) for i, j in losses.items()]}"
-            )
+            print(f"Step {self.iterate_counter} losses: {[(i, j.item()) for i, j in losses.items()]}")
 
             # Output stuff useful for humans
             return [(i, j.item()) for i, j in losses.items()], im
@@ -393,9 +391,7 @@ class VQGANCLIPRun(Run):
             # Advance iteration counter
             self.iterate_counter += 1
 
-            print(
-                f"Step {self.iterate_counter} losses: {[(i, j.item()) for i, j in losses.items()]}"
-            )
+            print(f"Step {self.iterate_counter} losses: {[(i, j.item()) for i, j in losses.items()]}")
 
             # Output stuff useful for humans
             return [(i, j.item()) for i, j in losses.items()], im

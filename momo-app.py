@@ -384,7 +384,7 @@ if __name__ == "__main__":
 
     outputdir = get_latest_outputdir()
     if not outputdir:
-        outputdir = get_new_outputdir()
+        # outputdir = get_new_outputdir()
         os.mkdir(getOutputPath(outputdir))
 
     # Determine what weights are available in `assets/`
@@ -418,11 +418,7 @@ if __name__ == "__main__":
     with st.form("form-inputs"):
         
         # Main Page elements
-        text_input = st.text_input(
-            "Text prompt",
-            help="VQGAN-CLIP will generate an image that best fits the prompt",
-            value= st.session_state.text_input if "text_input" in st.session_state else get_random_word()
-        )
+        text_input = st.text_input("Text prompt") 
 
         submitted = st.form_submit_button("Run!")
         
@@ -708,6 +704,7 @@ if __name__ == "__main__":
     if submitted:
         # debug_slot.write(st.session_state) # DEBUG
         status_text.text("Loading weights ...")
+        st.session_state.text_input = text_input
         generate_image(
             # Inputs
             text_input=text_input,
