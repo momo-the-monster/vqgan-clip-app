@@ -26,8 +26,8 @@ async def generate_image(
         text_input: str = "the first day of the waters",
         vqgan_ckpt: str = "vqgan_imagenet_f16_16384",
         num_steps: int = 300,
-        image_x: int = 300,
-        image_y: int = 300,
+        image_x: int = 260,
+        image_y: int = 355,
         init_image: Optional[Image.Image] = None,
         image_prompts: List[Image.Image] = [],
         continue_prev_run: bool = False,
@@ -86,6 +86,9 @@ async def generate_image(
         if "perceptor" in session:
             del session["perceptor"]
 
+        if "stack" in session:
+            del session["stack"]
+
         session["model"], session["perceptor"] = run.load_model()
         prev_run_id = None
 
@@ -108,28 +111,44 @@ async def generate_image(
         run.model_init()
 
     ### Iterate ----------------------------------------------------------------
+    step_counter = 0
     session['keep_running'] = True
 
-    while session['keep_running']:
-        _, im = run.iterate()
-        
-        # turn image into PNG bytes
-        buf = io.BytesIO()
-        im.save(buf, format='PNG')
-        
-        # send PNG bytes to client
-        await sio.emit('generate_image_update', buf.getvalue())
-        
-        # save current image as last image in session
-        session["prev_im"] = im
-        try:
-            await sio.call('uthere?', to=session['sid'], timeout=5)
-        except: #timeout exception called when client disconnects
-            session['keep_running'] = False
-            print('Nobody there, stopping.')
-    # end of session, return to ready
-    session['continue_prev_run'] = True
-    await set_gen_state(GenState.Ready)
+    try:
+        while session['keep_running']:
+            _, im = run.iterate()
+            
+            # turn image into PNG bytes
+            buf = io.BytesIO()
+            im.save(buf, format='PNG')
+            
+            # send PNG bytes to client
+            await sio.emit('generate_image_update', buf.getvalue())
+            
+            # save current image as last image in session
+            session["prev_im"] = im
+            stack_element = {"image":im, "step":step_counter}
+            if("stack" in session):
+                session["stack"].insert(0,stack_element)
+            else:
+                session["stack"] = [stack_element]
+            # purge images over x
+            if(len(session["stack"]) > 7):
+                session["stack"].pop()
+            step_counter += 1
+            try:
+                await sio.call('uthere?', to=session['sid'], timeout=5)
+            except: #timeout exception called when client disconnects
+                session['keep_running'] = False
+                print('Nobody there, stopping.')
+    except RuntimeError:
+        await send_error("Out of Memory, try reducing Image Size")
+    except:
+        await send_error("Something went wrong, restarting")
+    finally:
+        # end of session, return to ready
+        session['continue_prev_run'] = True
+        await set_gen_state(GenState.Ready)
             
 def convert_to_prompts(dict):
     result = ""
@@ -159,6 +178,7 @@ app.add_routes([web.static('/', "../vqgan-js", show_index=True)])
 
 session['continue_prev_run'] = False
 session['genState'] = GenState.Ready
+session["stack"] = []
 
 @sio.on('generate')
 async def start_run(sid, data):
@@ -177,6 +197,7 @@ async def start_run(sid, data):
 @sio.on('reset')
 async def reset_run(sid):
     session['continue_prev_run'] = False
+    session["stack"] = []
     print("reset")
 
 @sio.on('pause')
@@ -186,6 +207,24 @@ async def pause_run(sid):
     else:
         await set_gen_state(GenState.Ready)
 
+stack_output_dir = "E:\sync-test\Sync\sio"
+
+@sio.on('save')
+async def save(sid):
+    if("stack" in session):
+        i = 0
+        run_id = session["run_id"]
+        for entry in session["stack"]:
+            step = entry["step"]
+            image = entry["image"] 
+            save_dir = Path(stack_output_dir, run_id)
+            if not save_dir.exists():
+                os.mkdir(save_dir)
+            save_location = Path(save_dir, f"{run_id}_{step}.png")
+            print(save_location.absolute())
+            image.save(save_location.absolute())
+            i += 1
+        
 @sio.event
 async def connect(sid, environ, auth):
     print('connect ', sid)
@@ -208,9 +247,14 @@ async def send_current_data():
     if 'current_data' in session:
         payload['current_data'] = session['current_data']
         
-    print(f"sending payload {payload}")
+    print(f"sending current-state {payload}")
     
     await sio.emit('current_data', payload)
+
+async def send_error(error):
+    payload = {}
+    payload['message'] = error
+    await sio.emit('error', payload)
 
 @sio.event
 async def disconnect(sid):
@@ -218,4 +262,3 @@ async def disconnect(sid):
 
 if __name__ == '__main__':
     web.run_app(app, host='0.0.0.0', port=8501)
-    session['genState'] = GenState.Ready
