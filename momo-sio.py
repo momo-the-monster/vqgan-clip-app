@@ -1,4 +1,3 @@
-﻿import copy
 from pathlib import Path
 import sys
 import datetime
@@ -208,6 +207,55 @@ async def pause_run(sid):
         await set_gen_state(GenState.Ready)
 
 stack_output_dir = "E:\sync-test\Sync\sio"
+
+import requests
+url ="https://api.notion.com/v1/pages"
+url2 ="https://api.notion.com/v1/databases/c0721e6f1a1544dfb3493c721c02e441/query"
+
+@sio.on('notion')
+async def sendToNotion(sid, data):
+    payload = {
+        "parent": { "type":"database_id", "database_id": "c0721e6f-1a15-44df-b349-3c721c02e441"},
+        "properties": {
+            "Caption": {
+                "id": "j%3Epy",
+                "type": "rich_text",
+                "rich_text": [
+                    {
+                        "type": "text",
+                        "text": {
+                            "content": "MY CAPTION",
+                            "link": None
+                        },
+                        "annotations": {
+                            "bold": False,
+                            "italic": False,
+                            "strikethrough": False,
+                            "underline": False,
+                            "code": False,
+                            "color": "default"
+                        },
+                        "plain_text": "MY CAPTION",
+                        "href": None
+                    }
+                ]
+            },
+            "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [{"type": "text", "text": {"content": "python page"}}]
+            }
+        }
+    }
+
+    headers = {
+        "Accept": "application/json",
+        "Authorization": "Bearer secret_zsOnduGVPb6KTJkzudj6shPhYU0igbnwYwmOAcXnd9L",
+        "Content-Type": "application/json",
+        "Notion-Version": "2021-08-16"
+    }
+    response = requests.request("POST", url, json=payload, headers=headers)
+    print(f"response from notion: {response.status_code} : {response.reason} : {response.text}")
 
 @sio.on('save')
 async def save(sid):
