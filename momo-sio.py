@@ -227,7 +227,7 @@ async def save(sid):
         for entry in session["stack"]:
             step = entry["step"]
             image = entry["image"] 
-            save_dir = Path(stack_output_dir, run_id)
+            save_dir = Path(stack_output_dir)
             if not save_dir.exists():
                 os.mkdir(save_dir)
             save_location = Path(save_dir, f"{run_id}_{step}.png")
