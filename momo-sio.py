@@ -1,3 +1,4 @@
+import urllib
 from pathlib import Path
 import sys
 import datetime
@@ -100,6 +101,9 @@ async def generate_image(
     ).decode("ascii")
 
     run_start_dt = datetime.datetime.now()
+    
+    if init_image is not None:
+        session['input_image'] = init_image
 
     ### Model init -------------------------------------------------------------
     if continue_prev_run is True:
@@ -178,20 +182,27 @@ app.add_routes([web.static('/', "../vqgan-js", show_index=True)])
 session['continue_prev_run'] = False
 session['genState'] = GenState.Ready
 session["stack"] = []
+session['input_image'] = None
 
 @sio.on('generate')
 async def start_run(sid, data):
     session['sid'] = sid # track original requester, stop if they disconnect.
     
-    print(data)
+    # print(data)
     # convert preset to data
     size_x = data['size_x']
     size_y = data['size_y']
     text_input = convert_to_prompts(data['prompts'])
     session['current_data'] = data
+    
+    if 'image_prompt' in data:
+        imageBinaryBytes = data['image_prompt']
+        imageStream = io.BytesIO(imageBinaryBytes)
+        inputImage = Image.open(imageStream)
+    
     await set_gen_state(GenState.Running)
     # Start the run!
-    sio.start_background_task(generate_image, text_input, "vqgan_imagenet_f16_16384", -1, size_x, size_y, None, [], session['continue_prev_run'], 99, 0, 0, 0, 1e-3, False, 0, 0, 0, 1, 10, True);
+    sio.start_background_task(generate_image, text_input, "vqgan_imagenet_f16_16384", -1, size_x, size_y, inputImage, [], session['continue_prev_run'], 99, 0, 0, 0, 1e-3, False, 0, 0, 0, 1, 10, True);
 
 @sio.on('reset')
 async def reset_run(sid):
@@ -207,55 +218,6 @@ async def pause_run(sid):
         await set_gen_state(GenState.Ready)
 
 stack_output_dir = "E:\sync-test\Sync\sio"
-
-import requests
-url ="https://api.notion.com/v1/pages"
-url2 ="https://api.notion.com/v1/databases/c0721e6f1a1544dfb3493c721c02e441/query"
-
-@sio.on('notion')
-async def sendToNotion(sid, data):
-    payload = {
-        "parent": { "type":"database_id", "database_id": "c0721e6f-1a15-44df-b349-3c721c02e441"},
-        "properties": {
-            "Caption": {
-                "id": "j%3Epy",
-                "type": "rich_text",
-                "rich_text": [
-                    {
-                        "type": "text",
-                        "text": {
-                            "content": "MY CAPTION",
-                            "link": None
-                        },
-                        "annotations": {
-                            "bold": False,
-                            "italic": False,
-                            "strikethrough": False,
-                            "underline": False,
-                            "code": False,
-                            "color": "default"
-                        },
-                        "plain_text": "MY CAPTION",
-                        "href": None
-                    }
-                ]
-            },
-            "Name": {
-                "id": "title",
-                "type": "title",
-                "title": [{"type": "text", "text": {"content": "python page"}}]
-            }
-        }
-    }
-
-    headers = {
-        "Accept": "application/json",
-        "Authorization": "Bearer secret_zsOnduGVPb6KTJkzudj6shPhYU0igbnwYwmOAcXnd9L",
-        "Content-Type": "application/json",
-        "Notion-Version": "2021-08-16"
-    }
-    response = requests.request("POST", url, json=payload, headers=headers)
-    print(f"response from notion: {response.status_code} : {response.reason} : {response.text}")
 
 @sio.on('save')
 async def save(sid):
@@ -295,7 +257,7 @@ async def send_current_data():
     if 'current_data' in session:
         payload['current_data'] = session['current_data']
         
-    print(f"sending current-state {payload}")
+    # print(f"sending current-state {payload}")
     
     await sio.emit('current_data', payload)
 
